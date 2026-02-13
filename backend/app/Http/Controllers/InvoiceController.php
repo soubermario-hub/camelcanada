@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreInvoiceRequest;
 use App\Models\AuditLog;
 use App\Models\Invoice;
+use App\Models\CompanyUser;
 use App\Models\InvoiceItem;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +18,13 @@ class InvoiceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate(['company_id' => ['required', 'integer', 'exists:companies,id']]);
+        $isMember = CompanyUser::where('company_id', $data['company_id'])
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'active')
+            ->exists();
+
+        abort_unless($isMember, 403);
+
         return response()->json(Invoice::with('items')->where('company_id', $data['company_id'])->latest()->get());
     }
 
@@ -26,8 +34,13 @@ class InvoiceController extends Controller
 
         $invoice = DB::transaction(function () use ($request) {
             $companyId = (int) $request->integer('company_id');
-            $last = Invoice::where('company_id', $companyId)->lockForUpdate()->max('id');
-            $count = Invoice::where('company_id', $companyId)->where('id', '<=', $last)->count() + 1;
+            $lastInvoice = Invoice::where('company_id', $companyId)
+                ->orderByDesc('id')
+                ->lockForUpdate()
+                ->first();
+
+            $lastNumber = $lastInvoice ? (int) preg_replace('/\D/', '', $lastInvoice->invoice_number) : 0;
+            $count = $lastNumber + 1;
             $invoiceNumber = 'INV-' . str_pad((string) $count, 4, '0', STR_PAD_LEFT);
 
             $subtotal = 0;
@@ -82,8 +95,15 @@ class InvoiceController extends Controller
         return response()->json($invoice, 201);
     }
 
-    public function pdf(Invoice $invoice)
+    public function pdf(Request $request, Invoice $invoice)
     {
+        $isMember = CompanyUser::where('company_id', $invoice->company_id)
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'active')
+            ->exists();
+
+        abort_unless($isMember, 403);
+
         $invoice->load('items');
         $pdf = Pdf::loadView('invoice-pdf', ['invoice' => $invoice]);
         return $pdf->download("{$invoice->invoice_number}.pdf");

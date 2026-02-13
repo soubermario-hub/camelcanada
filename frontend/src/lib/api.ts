@@ -22,10 +22,13 @@ export const api = {
   },
   async post(path: string, body: unknown) {
     return request(path, { method: 'POST', body: JSON.stringify(body) });
+  },
+  async getBlob(path: string) {
+    return request(path, { method: 'GET' }, 'blob');
   }
 };
 
-async function request(path: string, init: RequestInit) {
+async function request(path: string, init: RequestInit, responseType: 'json' | 'blob' = 'json') {
   const headers = { 'Content-Type': 'application/json', ...(await authHeader()) };
   let response = await fetch(`${BASE_URL}${path}`, { ...init, headers });
 
@@ -45,5 +48,5 @@ async function request(path: string, init: RequestInit) {
     throw new Error(await response.text());
   }
 
-  return response.json();
+  return responseType === 'blob' ? response.blob() : response.json();
 }

@@ -19,6 +19,21 @@ class AccountingApiTest extends TestCase
         $this->getJson('/api/companies')->assertStatus(401);
     }
 
+
+    public function test_non_member_cannot_list_clients_or_invoices(): void
+    {
+        $user = User::factory()->create();
+        $company = Company::factory()->create();
+
+        $this->actingAs($user)
+            ->getJson('/api/clients?company_id=' . $company->id)
+            ->assertForbidden();
+
+        $this->actingAs($user)
+            ->getJson('/api/invoices?company_id=' . $company->id)
+            ->assertForbidden();
+    }
+
     public function test_member_cannot_create_client_or_invoice(): void
     {
         $user = User::factory()->create();
@@ -41,6 +56,21 @@ class AccountingApiTest extends TestCase
             ->assertCreated();
 
         $this->assertDatabaseHas('clients', ['company_id' => $company->id, 'name' => 'Acme']);
+    }
+
+
+    public function test_non_member_cannot_download_invoice_pdf(): void
+    {
+        $owner = User::factory()->create();
+        $intruder = User::factory()->create();
+        $company = Company::factory()->create();
+        CompanyUser::factory()->create(['company_id' => $company->id, 'user_id' => $owner->id, 'role' => 'owner']);
+        $client = Client::factory()->create(['company_id' => $company->id]);
+        $invoice = Invoice::factory()->create(['company_id' => $company->id, 'client_id' => $client->id]);
+
+        $this->actingAs($intruder)
+            ->get('/api/invoices/' . $invoice->id . '/pdf')
+            ->assertForbidden();
     }
 
     public function test_invoice_persists_and_pdf_works(): void

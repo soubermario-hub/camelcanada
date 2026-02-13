@@ -15,6 +15,19 @@ export function InvoicesPage() {
   const clients = useQuery({ queryKey: ['clients', activeCompanyId], enabled: Boolean(activeCompanyId), staleTime: 60_000, queryFn: () => api.get(`/clients?company_id=${activeCompanyId}`) });
   const invoices = useQuery({ queryKey: ['invoices', activeCompanyId], enabled: Boolean(activeCompanyId), staleTime: 60_000, queryFn: () => api.get(`/invoices?company_id=${activeCompanyId}`) });
 
+
+  const downloadInvoicePdf = async (invoice: { id: number; invoice_number: string }) => {
+    const pdfBlob = await api.getBlob(`/invoices/${invoice.id}/pdf`);
+    const url = URL.createObjectURL(pdfBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${invoice.invoice_number}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const createInvoice = useMutation({
     mutationFn: () => api.post('/invoices', {
       company_id: activeCompanyId,
@@ -32,7 +45,7 @@ export function InvoicesPage() {
   return <div>
     <h2>Invoices</h2>
     <ul>{(invoices.data || []).map((invoice: any) => (
-      <li key={invoice.id}>{invoice.invoice_number} - {invoice.total} <a href={`${import.meta.env.VITE_API_BASE_URL}/invoices/${invoice.id}/pdf`}>Download PDF</a></li>
+      <li key={invoice.id}>{invoice.invoice_number} - {invoice.total} <button type="button" onClick={() => downloadInvoicePdf(invoice)}>Download PDF</button></li>
     ))}</ul>
 
     <h3>Create Invoice</h3>
